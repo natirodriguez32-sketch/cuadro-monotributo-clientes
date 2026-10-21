@@ -144,7 +144,7 @@ const VIEWS={home,cats,clients,pagos,planes,docs,cfg};
 /* ---------- formularios ---------- */
 const REG=['Unificado Córdoba','Exento en Rentas (IIBB $0)','Convenio Multilateral (no unificado)'];
 const E={clients:{t:'cliente',d:{cat:'C',act:'Servicios',reg:'Unificado Córdoba'},req:['name'],f:[['name','Nombre o razón social','text'],['cuit','CUIT','text'],['cat','Categoría','sel',CATS],['act','Actividad','sel',['Servicios','Bienes']],['iibb','N° de inscripción en Rentas','text'],['reg','Régimen en Rentas','sel',REG],['muni','Tasa municipal mensual (si corresponde)','num']]},
- invoices:{t:'factura',d:{date:TODAY},req:['cid','date','amount'],f:[['cid','Cliente','client'],['date','Fecha de la factura','date'],['num','Tipo y número de comprobante','text'],['amount','Importe total (nota de crédito en negativo)','num']]},
+ invoices:{t:'factura',d:{date:TODAY},req:['cid','date','num','amount'],f:[['cid','Cliente','client'],['date','Fecha de la factura','date'],['num','Tipo y número de comprobante (obligatorio)','text'],['amount','Importe total (nota de crédito en negativo)','num']]},
  pagos:{t:'pago de Monotributo',d:{period:THISM},req:['cid','period'],f:[['cid','Cliente','client'],['period','Mes que se paga','month'],['amount','Importe real (vacío = cuota de la escala)','num'],['paid','Fecha de pago (vacío si todavía no pagó)','date'],['plan','Está incluido en un plan de pagos','chk']]},
  rentas:{t:'pago de Rentas',d:{period:THISM},req:['cid','period','amount'],f:[['cid','Cliente','client'],['period','Período','month'],['amount','Importe a pagar','num'],['due','Fecha de vencimiento','date'],['paid','Fecha de pago (vacío si todavía no pagó)','date'],['plan','Está incluido en un plan de pagos','chk']]},
  planes:{t:'plan de pagos',d:{org:'ARCA',pagas:0},req:['cid','total','cuotas','cuotaAmt'],f:[['cid','Cliente','client'],['org','Organismo','sel',['ARCA','Rentas Córdoba','Otro']],['desc','Deuda incluida (ej: Monotributo 03 a 06/2026)','text'],['total','Deuda total del plan','num'],['cuotas','Cantidad de cuotas','num'],['cuotaAmt','Importe de cada cuota','num'],['pagas','Cuotas ya pagas','num'],['first','Vencimiento de la 1ª cuota','date']]}};
@@ -159,6 +159,7 @@ function edit(ent,id=0,pre={}){const e=E[ent];if(ent!='clients'&&!S.clients.leng
 const closeM=()=>document.getElementById('modal').innerHTML='';
 function saveF(ev,ent,id){ev.preventDefault();const fd=new FormData(ev.target),o={};
  E[ent].f.forEach(([k,,t])=>{const v=fd.get(k);o[k]=t=='chk'?fd.has(k):t=='num'?(v===''?'':+v):t=='client'?+v:v});
+ if(ent=='invoices'&&isDup(o.cid,o.num,id)){msg('La factura '+o.num+' ya está cargada para este cliente');return false}
  if(id)Object.assign(S[ent].find(x=>x.id==id),o);else S[ent].push({id:uid(),...o});
  save();closeM();render();msg('Guardado');return false}
 function del(ent,id,btn){if(!btn.dataset.s){btn.dataset.s=1;btn.textContent='¿Seguro? Tocá de nuevo';return}
@@ -232,11 +233,14 @@ const openPdf=async buf=>{await loadPdf();return pdfjsLib.getDocument({data:new 
 async function drawPdf(pdf,box,max,scale){for(let i=1;i<=Math.min(pdf.numPages,max);i++){const p=await pdf.getPage(i),v=p.getViewport({scale}),c=document.createElement('canvas');c.width=v.width;c.height=v.height;box.appendChild(c);await p.render({canvasContext:c.getContext('2d'),viewport:v}).promise}}
 const CODES={1:'FC A',2:'ND A',3:'NC A',6:'FC B',7:'ND B',8:'NC B',11:'FC C',12:'ND C',13:'NC C'};
 function pn(s){s=s.replace(/[^\d.,]/g,'');if(s.includes(','))s=s.replace(/\./g,'').replace(',','.');else if(!/^\d+\.\d{2}$/.test(s))s=s.replace(/\./g,'');return parseFloat(s)}
+const nk=n=>{const s=String(n||''),m=s.match(/(\d{1,5})\s*-\s*(\d{1,8})\s*$/);return m?[(+m[1])+'-'+(+m[2]),((s.match(/\b(FC|NC|ND)\s*([ABCEM])\b/i)||[]).slice(1,3).join('')).toUpperCase()]:[s.trim().toLowerCase(),'']};
+const isDup=(cid,num,ex)=>{if(!String(num||'').trim())return false;const[a,t]=nk(num);return S.invoices.some(i=>i.id!=ex&&i.cid==cid&&i.num&&(([b,u])=>a==b&&(!t||!u||t==u))(nk(i.num)))};
 function parseInv(t){const o={};let m;
  if(m=t.match(/Fecha de Emisi[oó]n:?\s*(\d{2})\/(\d{2})\/(\d{4})/i))o.date=`${m[3]}-${m[2]}-${m[1]}`;
- const pv=t.match(/Punto de Venta:?\s*(\d{1,5})/i),nr=t.match(/Comp\.?\s*Nro:?\s*(\d{1,8})/i),cd=t.match(/COD\.?\s*0*(\d{1,3})\b/i),lb=cd?CODES[+cd[1]]||'':'';
+ const pv=t.match(/Punto de Venta:?\s*(\d{1,5})/i),nr=t.match(/Comp(?:robante)?\.?\s*N(?:ro|[°º])?\.?:?\s*(\d{1,8})/i),cd=t.match(/COD\.?\s*0*(\d{1,3})\b/i),lb=cd?CODES[+cd[1]]||'':'';
  o.nc=/^NC/.test(lb)||/NOTA DE CR[EÉ]DITO/i.test(t);
  if(pv&&nr)o.num=(lb?lb+' ':'')+pv[1].padStart(5,'0')+'-'+nr[1].padStart(8,'0');
+ else if(m=t.match(/\b(\d{4,5})-(\d{8})\b/))o.num=(lb?lb+' ':'')+m[1].padStart(5,'0')+'-'+m[2];
  if(m=t.match(/Importe Total:?\s*\$?\s*([\d.,]+)/i)){const a=pn(m[1]);if(!isNaN(a))o.amount=o.nc&&a>0?-a:a}
  o.cuits=[...new Set((t.match(/\b\d{2}-?\d{8}-?\d\b/g)||[]).map(dg))];return o}
 function up(cid){if(!S.clients.length){msg('Primero cargá un cliente');return go('clients')}UPCID=cid;document.getElementById('fi').click()}
@@ -247,12 +251,13 @@ async function next(){RV=null;if(!Q.length){closeM();render();return}const f=Q.s
  RV={f,buf,pdf,o};showRV()}
 function showRV(){const{f,o,pdf}=RV;let cid=UPCID;if(!cid){const h=S.clients.find(c=>dg(c.cuit)&&(o.cuits||[]).includes(dg(c.cuit)));cid=h?h.id:S.clients[0].id}
  const ok=o.date||o.num||o.amount!=null;
- document.getElementById('modal').innerHTML=`<div class="ov"><form class="md wide" oninput="rvChk()" onsubmit="rvSave(event);return false"><h2 style="margin:0">Nueva factura${Q.length?` <span class="mu">(faltan ${Q.length} más)</span>`:''}</h2><div class="mu">${esc(f.name)}</div><div class="pv" id="pvb">${pdf?'':'<p class="mu" style="padding:12px;color:#444">No se pudo mostrar la vista previa, pero el archivo se guarda igual.</p>'}</div><div class="mu" style="color:${ok?'var(--ok)':'var(--bad)'}">${ok?'Datos leídos de la factura. Revisalos antes de guardar.':'No pude leer los datos automáticamente: completalos a mano.'}</div><div id="rvw" style="color:var(--bad);font-size:13px"></div>${fld(['cid','Cliente','client'],cid,1)}${fld(['date','Fecha de la factura','date'],o.date||TODAY,1)}${fld(['num','Tipo y número de comprobante','text'],o.num||'',0)}${fld(['amount','Importe total (nota de crédito en negativo)','num'],o.amount??'',1)}<div class="tools" style="margin-top:16px"><button class="btn">Guardar factura</button><button type="button" class="btn sec" onclick="next()">Omitir</button><button type="button" class="btn sec" onclick="Q=[];RV=null;closeM();render()">Cancelar</button></div></form></div>`;
+ document.getElementById('modal').innerHTML=`<div class="ov"><form class="md wide" oninput="rvChk()" onsubmit="rvSave(event);return false"><h2 style="margin:0">Nueva factura${Q.length?` <span class="mu">(faltan ${Q.length} más)</span>`:''}</h2><div class="mu">${esc(f.name)}</div><div class="pv" id="pvb">${pdf?'':'<p class="mu" style="padding:12px;color:#444">No se pudo mostrar la vista previa, pero el archivo se guarda igual.</p>'}</div><div class="mu" style="color:${ok?'var(--ok)':'var(--bad)'}">${ok?'Datos leídos de la factura. Revisalos antes de guardar.':'No pude leer los datos automáticamente: completalos a mano.'}</div><div id="rvw" style="color:var(--bad);font-size:13px"></div>${fld(['cid','Cliente','client'],cid,1)}${fld(['date','Fecha de la factura','date'],o.date||TODAY,1)}${fld(['num','Tipo y número de comprobante (obligatorio)','text'],o.num||'',1)}${fld(['amount','Importe total (nota de crédito en negativo)','num'],o.amount??'',1)}<div class="tools" style="margin-top:16px"><button class="btn">Guardar factura</button><button type="button" class="btn sec" onclick="next()">Omitir</button><button type="button" class="btn sec" onclick="Q=[];RV=null;closeM();render()">Cancelar</button></div></form></div>`;
  rvChk();if(pdf)drawPdf(pdf,document.getElementById('pvb'),1,1.4).catch(()=>{})}
 function rvChk(){const s=document.querySelector('#modal select[name=cid]'),w=document.getElementById('rvw');if(!s||!w)return;const c=cl(s.value),cu=RV.o.cuits||[];
- w.textContent=cu.length&&c&&dg(c.cuit)&&!cu.includes(dg(c.cuit))?'Atención: el CUIT de esta factura no coincide con el de '+c.name+'.':''}
+ const n=document.querySelector('#modal input[name=num]'),dp=n&&isDup(+s.value,n.value);
+ w.textContent=[cu.length&&c&&dg(c.cuit)&&!cu.includes(dg(c.cuit))?'Atención: el CUIT de esta factura no coincide con el de '+c.name+'.':'',dp?'Esta factura ya está cargada para este cliente: no se va a cargar dos veces.':''].filter(Boolean).join(' ')}
 async function rvSave(ev){const fd=new FormData(ev.target),cid=+fd.get('cid'),num=(fd.get('num')||'').trim();
- if(num&&S.invoices.some(i=>i.cid==cid&&i.num==num)){msg('Esa factura ya está cargada para este cliente');return}
+ if(isDup(cid,num)){msg('La factura '+num+' ya está cargada para este cliente');return}
  const inv={id:uid(),cid,date:fd.get('date'),num,amount:+fd.get('amount')};
  try{const fid=uid();await fput({id:fid,name:RV.f.name,data:RV.buf});inv.file=fid;inv.fname=RV.f.name;try{const A=window.claude&&await claude.use('assets');if(A){const u=await A.upload(new Blob([RV.buf],{type:'application/pdf'}));inv.aid=u.id}}catch(e){}}catch(e){msg('No se pudo guardar el PDF, pero la factura se cargó')}
  S.invoices.push(inv);save();UPCID=UPCID||0;next()}
