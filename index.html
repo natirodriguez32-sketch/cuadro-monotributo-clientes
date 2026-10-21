@@ -1,0 +1,29 @@
+# Control de Monotributo – Córdoba
+
+App web de una sola página (sin servidor) para controlar a clientes monotributistas de Córdoba:
+
+- Tope de facturación por categoría (A a K) con semáforo.
+- Carga de facturas en PDF de ARCA: lee fecha, comprobante e importe y guarda el original en una carpeta por cliente.
+- Pago mensual unificado: Monotributo + Ingresos Brutos Córdoba + tasa municipal.
+- Planes de pago.
+- Informes en PDF y Word.
+
+Escalas vigentes de agosto 2026 a enero 2027. Se editan desde **Ajustes** cuando cambian (febrero y agosto).
+
+## Publicarla en GitHub Pages
+
+1. Entrá a github.com y creá un repositorio nuevo (por ejemplo `control-monotributo`).
+2. Tocá **Add file → Upload files** y subí `index.html` y este `README.md`.
+3. Andá a **Settings → Pages**. En **Branch** elegí `main` y la carpeta `/ (root)`, y guardá.
+4. En uno o dos minutos la app queda en `https://TU-USUARIO.github.io/control-monotributo/`.
+
+El repositorio solo contiene el código: **no incluye datos de clientes**.
+
+## Dónde se guardan los datos
+
+- **Versión en GitHub Pages:** los datos y los PDF quedan en el navegador de cada dispositivo (localStorage e IndexedDB). No se comparten entre dispositivos. Usá **Ajustes → Copia de seguridad** para pasar los datos de uno a otro.
+- **Versión abierta desde tu cuenta de Claude:** los datos se sincronizan automáticamente con tu nube privada, así los ves iguales desde cualquier dispositivo.
+
+## Uso de librerías externas
+
+Se cargan desde cdnjs: jsPDF 2.5.1, jsPDF-AutoTable 3.8.2, JSZip 3.10.1 y PDF.js 3.11.174.
